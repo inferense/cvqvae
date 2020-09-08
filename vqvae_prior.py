@@ -1,10 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[ ]:
-
-
-get_ipython().run_line_magic('matplotlib', 'inline')
 import matplotlib.pyplot as plt
 
 from __future__ import print_function
@@ -30,46 +23,37 @@ from math import sqrt
 from VQVAE import VQVAE
 
 
-# In[2]:
-
-
 def preprocess(x, n_bits):
-#     """ preprosses discrete latents space [0, 2**n_bits) to model space [-1,1]; if size of the codebook ie n_embeddings = 512 = 2**9 -> n_bit=9 """
+    #     """ preprosses discrete latents space [0, 2**n_bits) to model space [-1,1]; if size of the codebook ie n_embeddings = 512 = 2**9 -> n_bit=9 """
     # 1. convert data to float
     # 2. normalize to [0,1] given quantization
     # 3. shift to [-1,1]
-    return x.float().div(2**n_bits - 1).mul(2).add(-1)
+    return x.float().div(2 ** n_bits - 1).mul(2).add(-1)
+
 
 def deprocess(x, n_bits):
-#    """ deprocess x from model space [-1,1] to discrete latents space [0, 2**n_bits) where 2**n_bits is size of the codebook """
+    #    """ deprocess x from model space [-1,1] to discrete latents space [0, 2**n_bits) where 2**n_bits is size of the codebook """
     # 1. shift to [0,1]
     # 2. quantize to n_bits
     # 3. convert data to long
-    return x.add(1).div(2).mul(2**n_bits - 1).long()
+    return x.add(1).div(2).mul(2 ** n_bits - 1).long()
 
 
-# In[ ]:
-
-
-#==============
+# ==============
 # PixelSNAIL top prior
-#==============
-
-
-# In[3]:
+# ==============
 
 
 def down_shift(x):
-    return F.pad(x, (0,0,1,0))[:,:,:-1,:]
+    return F.pad(x, (0, 0, 1, 0))[:, :, :-1, :]
+
 
 def right_shift(x):
-    return F.pad(x, (1,0))[:,:,:,:-1]
+    return F.pad(x, (1, 0))[:, :, :, :-1]
+
 
 def concat_elu(x):
     return F.elu(torch.cat([x, -x], dim=1))
-
-
-# In[4]:
 
 
 class Conv2d(nn.Conv2d):
@@ -78,38 +62,34 @@ class Conv2d(nn.Conv2d):
         nn.utils.weight_norm(self)
 
 
-# In[5]:
-
-
 class DownConv(Conv2d):
-    def forward(self,x):
-        Hk,Wk=self.kernel_size
-        x=F.pad(x,((Wk-1)//2,(Wk-1)//2,Hk-1,0))
+    def forward(self, x):
+        Hk, Wk = self.kernel_size
+        x = F.pad(x, ((Wk - 1) // 2, (Wk - 1) // 2, Hk - 1, 0))
         return super().forward(x)
+
 
 class DownRightConv(Conv2d):
-    def forward(self,x):
-        Hk,Wk=self.kernel_size
-        x=F.pad(x,(Wk-1,0,Hk-1,0))
+    def forward(self, x):
+        Hk, Wk = self.kernel_size
+        x = F.pad(x, (Wk - 1, 0, Hk - 1, 0))
         return super().forward(x)
-
-
-# In[6]:
 
 
 class GatedResLayer(nn.Module):
-    def __init__(self, conv, n_channels, kernel_size, drop_rate=0, shortcut_channels=None, n_cond_classes=None, relu_fn=concat_elu):
+    def __init__(self, conv, n_channels, kernel_size, drop_rate=0, shortcut_channels=None, n_cond_classes=None,
+                 relu_fn=concat_elu):
         super().__init__()
         self.relu_fn = relu_fn
 
-        self.c1 = conv(2*n_channels, n_channels, kernel_size)
+        self.c1 = conv(2 * n_channels, n_channels, kernel_size)
         if shortcut_channels:
-            self.c1c = Conv2d(2*shortcut_channels, n_channels, kernel_size=1)
+            self.c1c = Conv2d(2 * shortcut_channels, n_channels, kernel_size=1)
         if drop_rate > 0:
             self.dropout = nn.Dropout(drop_rate)
-        self.c2 = conv(2*n_channels, 2*n_channels, kernel_size)
+        self.c2 = conv(2 * n_channels, 2 * n_channels, kernel_size)
         if n_cond_classes:
-            self.proj_y = nn.Linear(n_cond_classes, 2*n_channels)
+            self.proj_y = nn.Linear(n_cond_classes, 2 * n_channels)
 
     def forward(self, x, a=None, y=None):
         c1 = self.c1(self.relu_fn(x))
@@ -120,15 +100,12 @@ class GatedResLayer(nn.Module):
             c1 = self.dropout(c1)
         c2 = self.c2(c1)
         if y is not None:
-            c2=c2.transpose(1,3)
-            c2 += self.proj_y(y)[:,:,None]
-            c2=c2.transpose(1,3)
-        a, b = c2.chunk(2,1)
+            c2 = c2.transpose(1, 3)
+            c2 += self.proj_y(y)[:, :, None]
+            c2 = c2.transpose(1, 3)
+        a, b = c2.chunk(2, 1)
         out = x + a * torch.sigmoid(b)
-        return out       
-
-
-# In[7]:
+        return out
 
 
 def causal_attention(k, q, v, mask, nh, drop_rate, training):
@@ -136,25 +113,23 @@ def causal_attention(k, q, v, mask, nh, drop_rate, training):
     _, dv, _, _ = v.shape
 
     # split channels into multiple heads, flatten H,W dims and scale q; out (B, nh, dkh or dvh, HW)
-    flat_q = q.reshape(B, nh, dq//nh, H, W).flatten(3) * (dq//nh)**-0.5
-    flat_k = k.reshape(B, nh, dq//nh, H, W).flatten(3)
-    flat_v = v.reshape(B, nh, dv//nh, H, W).flatten(3)
+    flat_q = q.reshape(B, nh, dq // nh, H, W).flatten(3) * (dq // nh) ** -0.5
+    flat_k = k.reshape(B, nh, dq // nh, H, W).flatten(3)
+    flat_v = v.reshape(B, nh, dv // nh, H, W).flatten(3)
 
-    logits = torch.matmul(flat_q.transpose(2,3), flat_k)              # (B,nh,HW,dq) dot (B,nh,dq,HW) = (B,nh,HW,HW)
+    logits = torch.matmul(flat_q.transpose(2, 3), flat_k)  # (B,nh,HW,dq) dot (B,nh,dq,HW) = (B,nh,HW,HW)
     logits = F.dropout(logits, p=drop_rate, training=training, inplace=True)
-    logits = logits.masked_fill(mask==0, -1e10)
+    logits = logits.masked_fill(mask == 0, -1e10)
     weights = F.softmax(logits, -1)
 
-    attn_out = torch.matmul(weights, flat_v.transpose(2,3))           # (B,nh,HW,HW) dot (B,nh,HW,dvh) = (B,nh,HW,dvh)
-    attn_out = attn_out.transpose(2,3)                                # (B,nh,dvh,HW)
-    return attn_out.reshape(B, -1, H, W)                              # (B,dv,H,W)
-
-
-# In[8]:
+    attn_out = torch.matmul(weights, flat_v.transpose(2, 3))  # (B,nh,HW,HW) dot (B,nh,HW,dvh) = (B,nh,HW,dvh)
+    attn_out = attn_out.transpose(2, 3)  # (B,nh,dvh,HW)
+    return attn_out.reshape(B, -1, H, W)  # (B,dv,H,W)
 
 
 class AttentionGatedResidualLayer(nn.Module):
-    def __init__(self, n_channels, n_background_ch, n_res_layers, n_cond_classes, drop_rate, nh, dq, dv, attn_drop_rate):
+    def __init__(self, n_channels, n_background_ch, n_res_layers, n_cond_classes, drop_rate, nh, dq, dv,
+                 attn_drop_rate):
         super().__init__()
         # attn params
         self.nh = nh
@@ -163,11 +138,14 @@ class AttentionGatedResidualLayer(nn.Module):
         self.attn_drop_rate = attn_drop_rate
 
         self.input_gated_resnet = nn.ModuleList([
-            *[GatedResLayer(DownRightConv, n_channels, (2,2), drop_rate, None, n_cond_classes) for _ in range(n_res_layers)]])
-        self.in_proj_kv = nn.Sequential(GatedResLayer(Conv2d, 2*n_channels + n_background_ch, 1, drop_rate, None, n_cond_classes),
-                                        Conv2d(2*n_channels + n_background_ch, dq+dv, 1))
-        self.in_proj_q  = nn.Sequential(GatedResLayer(Conv2d, n_channels + n_background_ch, 1, drop_rate, None, n_cond_classes),
-                                        Conv2d(n_channels + n_background_ch, dq, 1))
+            *[GatedResLayer(DownRightConv, n_channels, (2, 2), drop_rate, None, n_cond_classes) for _ in
+              range(n_res_layers)]])
+        self.in_proj_kv = nn.Sequential(
+            GatedResLayer(Conv2d, 2 * n_channels + n_background_ch, 1, drop_rate, None, n_cond_classes),
+            Conv2d(2 * n_channels + n_background_ch, dq + dv, 1))
+        self.in_proj_q = nn.Sequential(
+            GatedResLayer(Conv2d, n_channels + n_background_ch, 1, drop_rate, None, n_cond_classes),
+            Conv2d(n_channels + n_background_ch, dq, 1))
         self.out_proj = GatedResLayer(Conv2d, n_channels, 1, drop_rate, dv, n_cond_classes)
 
     def forward(self, x, background, attn_mask, y=None):
@@ -182,62 +160,50 @@ class AttentionGatedResidualLayer(nn.Module):
         return self.out_proj(ul, attn_out)
 
 
-# In[9]:
-
-
 class PixelSNAIL(nn.Module):
     def __init__(self, input_dims, n_channels, n_res_layers, n_out_stack_layers, n_cond_classes, n_bits,
                  attn_n_layers=4, attn_nh=8, attn_dq=16, attn_dv=128, attn_drop_rate=0, drop_rate=0.5, **kwargs):
         super().__init__()
-        H,W = input_dims[2]
+        H, W = input_dims[2]
         # init background
-        background_v = ((torch.arange(H, dtype=torch.float) - H / 2) / 2).view(1,1,-1,1).expand(1,1,H,W)
-        background_h = ((torch.arange(W, dtype=torch.float) - W / 2) / 2).view(1,1,1,-1).expand(1,1,H,W)
+        background_v = ((torch.arange(H, dtype=torch.float) - H / 2) / 2).view(1, 1, -1, 1).expand(1, 1, H, W)
+        background_h = ((torch.arange(W, dtype=torch.float) - W / 2) / 2).view(1, 1, 1, -1).expand(1, 1, H, W)
         self.register_buffer('background', torch.cat([background_v, background_h], 1))
         # init attention mask over current and future pixels
-        attn_mask = torch.tril(torch.ones(1,1,H*W,H*W), diagonal=-1).byte()  # 1s below diagonal -- attend to context only
+        attn_mask = torch.tril(torch.ones(1, 1, H * W, H * W),
+                               diagonal=-1).byte()  # 1s below diagonal -- attend to context only
         self.register_buffer('attn_mask', attn_mask)
 
         # input layers for `up` and `up and to the left` pixels
-        self.ul_input_d = DownConv(2, n_channels, kernel_size=(1,3))
-        self.ul_input_dr = DownRightConv(2, n_channels, kernel_size=(2,1))
+        self.ul_input_d = DownConv(2, n_channels, kernel_size=(1, 3))
+        self.ul_input_dr = DownRightConv(2, n_channels, kernel_size=(2, 1))
         self.ul_modules = nn.ModuleList([
             *[AttentionGatedResidualLayer(n_channels, self.background.shape[1], n_res_layers, n_cond_classes, drop_rate,
                                           attn_nh, attn_dq, attn_dv, attn_drop_rate) for _ in range(attn_n_layers)]])
         self.output_stack = nn.Sequential(
-            *[GatedResLayer(DownRightConv, n_channels, (2,2), drop_rate, None, n_cond_classes) \
-            for _ in range(n_out_stack_layers)])
-        self.output_conv = Conv2d(n_channels, 2**n_bits, kernel_size=1)
-
+            *[GatedResLayer(DownRightConv, n_channels, (2, 2), drop_rate, None, n_cond_classes) \
+              for _ in range(n_out_stack_layers)])
+        self.output_conv = Conv2d(n_channels, 2 ** n_bits, kernel_size=1)
 
     def forward(self, x, y=None):
         # add channel of ones to distinguish image from padding later on
-        x = F.pad(x, (0,0,0,0,0,1), value=1)
+        x = F.pad(x, (0, 0, 0, 0, 0, 1), value=1)
 
         ul = down_shift(self.ul_input_d(x)) + right_shift(self.ul_input_dr(x))
         for m in self.ul_modules:
-            ul = m(ul, self.background.expand(x.shape[0],-1,-1,-1), self.attn_mask, y)
+            ul = m(ul, self.background.expand(x.shape[0], -1, -1, -1), self.attn_mask, y)
         ul = self.output_stack(ul)
         return self.output_conv(F.elu(ul)).unsqueeze(2)  # out (B, 2**n_bits, 1, H, W)
 
 
-# In[ ]:
-
-
-#=============
+# =============
 # PixelCNN bottom prior
-#=============
-
-
-# In[10]:
+# =============
 
 
 def pixelcnn_gate(x):
-    a, b = x.chunk(2,1)
+    a, b = x.chunk(2, 1)
     return torch.tanh(a) * torch.sigmoid(b)
-
-
-# In[11]:
 
 
 class MaskedConv2d(nn.Conv2d):
@@ -247,41 +213,39 @@ class MaskedConv2d(nn.Conv2d):
 
     def apply_mask(self):
         H, W = self.kernel_size
-        self.weight.data[:,:,H//2+1:,:].zero_()     # mask out rows below the middle
-        self.weight.data[:,:,H//2,W//2+1:].zero_()  # mask out center row pixels right of middle
-        if self.mask_type=='a':
-            self.weight.data[:,:,H//2,W//2] = 0     # mask out center pixel
+        self.weight.data[:, :, H // 2 + 1:, :].zero_()  # mask out rows below the middle
+        self.weight.data[:, :, H // 2, W // 2 + 1:].zero_()  # mask out center row pixels right of middle
+        if self.mask_type == 'a':
+            self.weight.data[:, :, H // 2, W // 2] = 0  # mask out center pixel
 
     def forward(self, x):
         self.apply_mask()
         return super().forward(x)
 
 
-# In[12]:
-
-
 class GatedResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, n_cond_channels, drop_rate):
         super().__init__()
-        self.residual = (in_channels==out_channels)
+        self.residual = (in_channels == out_channels)
         self.drop_rate = drop_rate
 
-        self.v   = nn.Conv2d(in_channels, 2*out_channels, kernel_size, padding=kernel_size//2)              # vertical stack
-        self.h   = nn.Conv2d(in_channels, 2*out_channels, (1, kernel_size), padding=(0, kernel_size//2))    # horizontal stack
-        self.v2h = nn.Conv2d(2*out_channels, 2*out_channels, kernel_size=1)                                 # vertical to horizontal connection
-        self.h2h = nn.Conv2d(out_channels, out_channels, kernel_size=1, bias=False)                         # horizontal to horizontal
+        self.v = nn.Conv2d(in_channels, 2 * out_channels, kernel_size, padding=kernel_size // 2)  # vertical stack
+        self.h = nn.Conv2d(in_channels, 2 * out_channels, (1, kernel_size),
+                           padding=(0, kernel_size // 2))  # horizontal stack
+        self.v2h = nn.Conv2d(2 * out_channels, 2 * out_channels, kernel_size=1)  # vertical to horizontal connection
+        self.h2h = nn.Conv2d(out_channels, out_channels, kernel_size=1, bias=False)  # horizontal to horizontal
 
         if n_cond_channels:
-            self.in_proj_y = nn.Conv2d(n_cond_channels, 2*out_channels, kernel_size=1)
+            self.in_proj_y = nn.Conv2d(n_cond_channels, 2 * out_channels, kernel_size=1)
 
         if self.drop_rate > 0:
             self.dropout_h = nn.Dropout(drop_rate)
 
     def apply_mask(self):
-        self.v.weight.data[:,:,self.v.kernel_size[0]//2:,:].zero_()     # mask out middle row and below
-        self.h.weight.data[:,:,:,self.h.kernel_size[1]//2+1:].zero_()   # mask out to the right of the central column
-        
-        
+        self.v.weight.data[:, :, self.v.kernel_size[0] // 2:, :].zero_()  # mask out middle row and below
+        self.h.weight.data[:, :, :,
+        self.h.kernel_size[1] // 2 + 1:].zero_()  # mask out to the right of the central column
+
     def forward(self, x_v, x_h, y):
         self.apply_mask()
 
@@ -305,40 +269,40 @@ class GatedResidualBlock(nn.Module):
             x_h_out = x_h_out + x_h
 
         return x_v_out, x_h_out
-    
+
     def extra_repr(self):
         return 'residual={}, drop_rate={}'.format(self.residual, self.drop_rate)
 
 
-# In[13]:
-
-
 class PixelCNN(nn.Module):
-    def __init__(self, n_channels, n_out_conv_channels, kernel_size, n_res_layers, n_cond_stack_layers, n_cond_classes, n_bits,
+    def __init__(self, n_channels, n_out_conv_channels, kernel_size, n_res_layers, n_cond_stack_layers, n_cond_classes,
+                 n_bits,
                  drop_rate=0, **kwargs):
         super().__init__()
         # conditioning layers (bottom prior conditioned on annotations and top-level code)
-        self.in_proj_y = nn.Linear(n_cond_classes, 2*n_channels)
-        self.in_proj_h = nn.ConvTranspose2d(1, n_channels, kernel_size=4, stride=2, padding=1) 
+        self.in_proj_y = nn.Linear(n_cond_classes, 2 * n_channels)
+        self.in_proj_h = nn.ConvTranspose2d(1, n_channels, kernel_size=4, stride=2, padding=1)
         self.cond_layers = nn.ModuleList([
-            GatedResLayer(partial(Conv2d, padding=kernel_size//2), n_channels, kernel_size, drop_rate, None, n_cond_classes) \
+            GatedResLayer(partial(Conv2d, padding=kernel_size // 2), n_channels, kernel_size, drop_rate, None,
+                          n_cond_classes) \
             for _ in range(n_cond_stack_layers)])
-        self.out_proj_h = nn.Conv2d(n_channels, 2*n_channels, kernel_size=1)  
+        self.out_proj_h = nn.Conv2d(n_channels, 2 * n_channels, kernel_size=1)
 
         # pixelcnn layers
-        self.input_conv = MaskedConv2d('a', 1, 2*n_channels, kernel_size=7, padding=3)
+        self.input_conv = MaskedConv2d('a', 1, 2 * n_channels, kernel_size=7, padding=3)
         self.res_layers = nn.ModuleList([
-            GatedResidualBlock(n_channels, n_channels, kernel_size, 2*n_channels, drop_rate) for _ in range(n_res_layers)])
-        self.conv_out1 = nn.Conv2d(n_channels, 2*n_out_conv_channels, kernel_size=1)
-        self.conv_out2 = nn.Conv2d(n_out_conv_channels, 2*n_out_conv_channels, kernel_size=1)
-        self.output = nn.Conv2d(n_out_conv_channels, 2**n_bits, kernel_size=1)
+            GatedResidualBlock(n_channels, n_channels, kernel_size, 2 * n_channels, drop_rate) for _ in
+            range(n_res_layers)])
+        self.conv_out1 = nn.Conv2d(n_channels, 2 * n_out_conv_channels, kernel_size=1)
+        self.conv_out2 = nn.Conv2d(n_out_conv_channels, 2 * n_out_conv_channels, kernel_size=1)
+        self.output = nn.Conv2d(n_out_conv_channels, 2 ** n_bits, kernel_size=1)
 
     def forward(self, x, h=None, y=None):
         h = self.in_proj_h(h)
         for l in self.cond_layers:
             h = l(h, y=y)
         h = self.out_proj_h(h)
-        y = self.in_proj_y(y)[:,:,None,None]
+        y = self.in_proj_y(y)[:, :, None, None]
 
         # pixelcnn model
         x = pixelcnn_gate(self.input_conv(x) + h + y)
@@ -347,5 +311,4 @@ class PixelCNN(nn.Module):
             x_v, x_h = l(x_v, x_h, y)
         out = pixelcnn_gate(self.conv_out1(x_h))
         out = pixelcnn_gate(self.conv_out2(out))
-        return self.output(out)#.unsqueeze(2)  # (B, 2**n_bits, 1, H, W)
-
+        return self.output(out)  # .unsqueeze(2)  # (B, 2**n_bits, 1, H, W)

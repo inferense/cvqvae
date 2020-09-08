@@ -1,10 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[ ]:
-
-
-get_ipython().run_line_magic('matplotlib', 'inline')
 import matplotlib.pyplot as plt
 
 from __future__ import print_function
@@ -30,9 +23,6 @@ from math import sqrt
 from VQVAE import VQVAE
 
 
-# In[ ]:
-
-
 # load model
 
 model=VQVAE(in_channels=in_channels,num_hiddens=num_hiddens,num_residual_layers=num_residual_layers,num_residual_hiddens=num_residual_hiddens,num_embeddings=num_embeddings,
@@ -41,9 +31,6 @@ model=VQVAE(in_channels=in_channels,num_hiddens=num_hiddens,num_residual_layers=
 ckpt=torch.load('vqvae2.pt')
 model.load_state_dict(ckpt)
 model.to(device)
-
-
-# In[ ]:
 
 
 @torch.no_grad()
@@ -72,9 +59,6 @@ def create_code_extract(vqvae, data):
     else:
         dataset = torch.load(dataset_path)
     return dataset
-
-
-# In[ ]:
 
 
 create_code_extract(model, dataloader)

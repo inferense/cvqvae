@@ -1,10 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[ ]:
-
-
-get_ipython().run_line_magic('matplotlib', 'inline')
 import matplotlib.pyplot as plt
 
 from __future__ import print_function
@@ -30,16 +23,9 @@ from math import sqrt
 from VQVAE import VQVAE
 
 
-# In[ ]:
-
-
 #================
 # Hyperparameters
 #================
-
-
-# In[ ]:
-
 
 epochs=200
 
@@ -56,9 +42,6 @@ decay=0.99
 lr=3e-4
 
 
-# In[ ]:
-
-
 model=VQVAE(in_channels=in_channels,num_hiddens=num_hiddens,num_residual_layers=num_residual_layers,num_residual_hiddens=num_residual_hiddens,num_embeddings=num_embeddings,
            embedding_dim=embedding_dim,commitment_cost=commitment_cost,decay=decay,)
 
@@ -66,8 +49,9 @@ model.to(device)
 
 optimizer=optim.Adam(model.parameters(), lr=lr,amsgrad=False)
 
-
-# In[ ]:
+#==============
+# Train
+#==============
 
 
 def train(epoch, model, loader, optimizer, device):
@@ -103,21 +87,12 @@ def train(epoch, model, loader, optimizer, device):
         )
 
 
-# In[ ]:
-
-
 for i in range(epochs):
     train(i, model,dataloader,optimizer,device)
 
 
-# In[ ]:
-
-
 filepath='vqvae2.pt'
 torch.save(model.state_dict(),filepath)
-
-
-# In[ ]:
 
 
 model=VQVAE(in_channels=in_channels,num_hiddens=num_hiddens,num_residual_layers=num_residual_layers,num_residual_hiddens=num_residual_hiddens,num_embeddings=num_embeddings,
@@ -128,15 +103,9 @@ model.load_state_dict(ckpt)
 model.to(device)
 
 
-# In[ ]:
-
-
 #==============
 # show reconstructions
 #==============
-
-
-# In[ ]:
 
 
 (valid_originals, _) = next(iter(testloader))
@@ -146,16 +115,10 @@ valid_originals = valid_originals.to(device)
 valid_reconstruction,_ = model(valid_originals)
 
 
-# In[ ]:
-
-
 (train_originals, _) = next(iter(trainloader))
 train_originals = train_originals.to(device)
 
 train_reconstruction,_=model(train_originals)
-
-
-# In[ ]:
 
 
 def show(img,title):
@@ -167,14 +130,6 @@ def show(img,title):
     fig.axes.get_yaxis().set_visible(False)
 
 
-# In[ ]:
-
-
 show(make_grid(valid_originals.cpu()+0.5),title='originals')
-
-
-# In[ ]:
-
-
 show(make_grid(valid_reconstruction.cpu().data)+0.5,title='reconstructed')
 
