@@ -1,7 +1,7 @@
 # CVQVAE
 ## Pytorch implementation of conditional-VQVAE. 
 
-Credits:  Code adapted from kamenbliznashki
+Credits: vqvae_prior.py code adapted from kamenbliznashki
 
 
 ### Usage
