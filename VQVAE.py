@@ -114,7 +114,7 @@ plt.imshow(np.transpose(vutils.make_grid(images[0].to(device)[:3], padding=2, no
 
 
 # ================
-# VQ
+# VQVAE
 # ================
 
 
