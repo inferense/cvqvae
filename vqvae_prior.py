@@ -20,7 +20,7 @@ from tqdm import tqdm
 
 from math import sqrt
 
-from VQVAE import VQVAE
+from vqvae import VQVAE
 
 
 def preprocess(x, n_bits):
@@ -77,19 +77,18 @@ class DownRightConv(Conv2d):
 
 
 class GatedResLayer(nn.Module):
-    def __init__(self, conv, n_channels, kernel_size, drop_rate=0, shortcut_channels=None, n_cond_classes=None,
-                 relu_fn=concat_elu):
+    def __init__(self, conv, n_channels, kernel_size, drop_rate=0, shortcut_channels=None, n_cond_classes=None, relu_fn=concat_elu):
         super().__init__()
         self.relu_fn = relu_fn
 
-        self.c1 = conv(2 * n_channels, n_channels, kernel_size)
+        self.c1 = conv(2*n_channels, n_channels, kernel_size)
         if shortcut_channels:
-            self.c1c = Conv2d(2 * shortcut_channels, n_channels, kernel_size=1)
+            self.c1c = Conv2d(2*shortcut_channels, n_channels, kernel_size=1)
         if drop_rate > 0:
             self.dropout = nn.Dropout(drop_rate)
-        self.c2 = conv(2 * n_channels, 2 * n_channels, kernel_size)
+        self.c2 = conv(2*n_channels, 2*n_channels, kernel_size)
         if n_cond_classes:
-            self.proj_y = nn.Linear(n_cond_classes, 2 * n_channels)
+            self.proj_y = nn.Linear(n_cond_classes, 2*n_channels)
 
     def forward(self, x, a=None, y=None):
         c1 = self.c1(self.relu_fn(x))
@@ -100,10 +99,10 @@ class GatedResLayer(nn.Module):
             c1 = self.dropout(c1)
         c2 = self.c2(c1)
         if y is not None:
-            c2 = c2.transpose(1, 3)
-            c2 += self.proj_y(y)[:, :, None]
-            c2 = c2.transpose(1, 3)
-        a, b = c2.chunk(2, 1)
+            c2=c2.transpose(1,3)
+            c2 += self.proj_y(y)[:,:,None]
+            c2=c2.transpose(1,3)
+        a, b = c2.chunk(2,1)
         out = x + a * torch.sigmoid(b)
         return out
 
@@ -279,14 +278,16 @@ class PixelCNN(nn.Module):
                  n_bits,
                  drop_rate=0, **kwargs):
         super().__init__()
-        # conditioning layers (bottom prior conditioned on annotations and top-level code)
+        # conditioning layers (bottom prior conditioned on class labels and top-level code)
         self.in_proj_y = nn.Linear(n_cond_classes, 2 * n_channels)
-        self.in_proj_h = nn.ConvTranspose2d(1, n_channels, kernel_size=4, stride=2, padding=1)
+        self.in_proj_h = nn.ConvTranspose2d(1, n_channels, kernel_size=4, stride=2,
+                                            padding=1)  # upsample top codes to bottom-level spacial dim
         self.cond_layers = nn.ModuleList([
             GatedResLayer(partial(Conv2d, padding=kernel_size // 2), n_channels, kernel_size, drop_rate, None,
                           n_cond_classes) \
             for _ in range(n_cond_stack_layers)])
-        self.out_proj_h = nn.Conv2d(n_channels, 2 * n_channels, kernel_size=1)
+        self.out_proj_h = nn.Conv2d(n_channels, 2 * n_channels,
+                                    kernel_size=1)  # double channels top apply pixelcnn_gate
 
         # pixelcnn layers
         self.input_conv = MaskedConv2d('a', 1, 2 * n_channels, kernel_size=7, padding=3)
@@ -298,17 +299,18 @@ class PixelCNN(nn.Module):
         self.output = nn.Conv2d(n_out_conv_channels, 2 ** n_bits, kernel_size=1)
 
     def forward(self, x, h=None, y=None):
+        # conditioning inputs -- h is top-level codes; y is class labels
         h = self.in_proj_h(h)
         for l in self.cond_layers:
             h = l(h, y=y)
         h = self.out_proj_h(h)
-        y = self.in_proj_y(y)[:, :, None, None]
-
-        # pixelcnn model
+        y = self.in_proj_y(y)[:, :, None]
+        y = y.transpose(1, 3)
         x = pixelcnn_gate(self.input_conv(x) + h + y)
         x_v, x_h = x, x
+
         for l in self.res_layers:
             x_v, x_h = l(x_v, x_h, y)
         out = pixelcnn_gate(self.conv_out1(x_h))
         out = pixelcnn_gate(self.conv_out2(out))
-        return self.output(out)  # .unsqueeze(2)  # (B, 2**n_bits, 1, H, W)
+        return self.output(out).unsqueeze(2)  # (B, 2**n_bits, 1, H, W)
