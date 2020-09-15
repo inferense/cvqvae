@@ -10,9 +10,9 @@ The code was imported from ipynb notebook and is in post processing.
 Credits: vqvae_prior.py code adapted from kamenbliznashki
 
 ### Preprequisites 
-  Downloaded MS-COCO captions dataset
-  Pytorch >= 1.6
-  GPU environment - the PixelSNAIL (vqvae_prior.py) is heavy to train especially on high-resolution images
+  > -Downloaded MS-COCO captions dataset
+  > -Pytorch >= 1.6
+  > -GPU environment - the PixelSNAIL (vqvae_prior.py) is heavy to train especially on high-resolution images
 
 
 ### Usage
