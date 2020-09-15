@@ -9,6 +9,10 @@ The code was imported from ipynb notebook and is in post processing.
 
 Credits: vqvae_prior.py code adapted from kamenbliznashki
 
+### Preprequisites 
+  Downloaded MS-COCO captions dataset
+  Pytorch 
+
 
 ### Usage
   1. Train vqvae.py
