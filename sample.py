@@ -29,9 +29,8 @@ def generate(vqvae, bottom_prior, top_prior, y=None):
     top_sample = sample_prior(top_prior, None, y, n_samples=1, in_dims=input_dims[2], n_bits=n_bits)
         # sample bottom prior conditioned on top_sample codes and class labels y
     bottom_sample = sample_prior(bottom_prior, preprocess(top_samples, n_bits=9), y, n_samples=1, in_dims=input_dims[1], n_bits=n_bits)
-        # decode
+        #decode
     decoded_sample = vqvae.decode_code(top_samples.squeeze(1),bottom_samples.squeeze(1))
-#     sample = torch.cat(samples)
     decoded_sample=decoded_sample.clamp(-1,1)
 
     return save_image(decoded_sample,'sample2.png',normalize=True,range=(-1,1))
