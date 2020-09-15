@@ -25,18 +25,17 @@ def sample_prior(model, h, y, n_samples, in_dims, n_bits):
 
 @torch.no_grad()
 def generate(vqvae, bottom_prior, top_prior, y=None):
-    # sample top prior conditioned on class labels y
-    top_samples = sample_prior(top_prior, None, y, n_samples=1, in_dims=input_dims[2], n_bits=n_bits)
-    # sample bottom prior conditioned on top_sample codes and class labels y
-    bottom_samples = sample_prior(bottom_prior, preprocess(top_samples, n_bits=9), y, n_samples=1, in_dims=[88, 88],
-                                  n_bits=n_bits)
-    # decode
-    sample = vqvae.decode_code(top_samples, bottom_samples)
-    #     sample = torch.cat(samples)
-    decoded_sample = decoded_sample.clamp(-1, 1)
-    # save_image(decoded_sample,'sample.png',normalize=True,range=(-1,1))
+        # sample top prior conditioned on class labels y
+    top_sample = sample_prior(top_prior, None, y, n_samples=1, in_dims=input_dims[2], n_bits=n_bits)
+        # sample bottom prior conditioned on top_sample codes and class labels y
+    bottom_sample = sample_prior(bottom_prior, preprocess(top_samples, n_bits=9), y, n_samples=1, in_dims=input_dims[1], n_bits=n_bits)
+        # decode
+    decoded_sample = vqvae.decode_code(top_samples.squeeze(1),bottom_samples.squeeze(1))
+#     sample = torch.cat(samples)
+    decoded_sample=decoded_sample.clamp(-1,1)
 
-    return save_image(decoded_sample, 'sample.png', normalize=True, range=(-1, 1))
+    return save_image(decoded_sample,'sample2.png',normalize=True,range=(-1,1))
+
 
 
 def load_model(model):
@@ -78,7 +77,4 @@ vqvae=load_model('vqvae')
 top_prior=load_model('top_prior')
 bottom_prior=load_model('bottom_prior')
 
-y=input_y()
 samples = generate(vqvae, bottom_prior, top_prior, y=y)
-samples = samples.cpu()
-save_image(samples.cpu(), os.path.join('sample1', 'generation_sample_step_{}.png'.format(0)))
