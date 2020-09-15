@@ -3,6 +3,8 @@
 
 Implementation optimized for the MS-COCO dataset.
 
+The code was imported from ipynb notebook and is in post processing. 
+
 Credits: vqvae_prior.py code adapted from kamenbliznashki
 
 
