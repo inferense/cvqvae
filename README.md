@@ -5,7 +5,7 @@ original paper: [Generating Diverse High-Fidelity Images with VQ-VAE-2](https://
 
 This implementation is optimized for the MS-COCO dataset (Captions 2014). Currently supports hierarchical VQVAE and PixelSNAIL.
 
-The code was imported from ipynb notebook and is in post processing. 
+The code was imported from ipynb notebook.
 
 Credits: vqvae_prior.py code adapted from kamenbliznashki
 
