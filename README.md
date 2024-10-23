@@ -1,4 +1,4 @@
-# Text-to-image synthesis using CVQVAE
+# CVQVAE (Conditional-Vector-Quantized-Variational-Autoencoder) for text-to-image synthesys.
 ## Pytorch implementation of conditional-VQVAE2 for generating high-fidelity multi-object images based on text captions.
 
 original paper: [Generating Diverse High-Fidelity Images with VQ-VAE-2](https://arxiv.org/abs/1906.00446)
